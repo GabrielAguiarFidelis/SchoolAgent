@@ -254,6 +254,22 @@ app.post('/api/events', async (req, res) => {
   }
 })
 
+app.delete('/api/events/:id', async (req, res) => {
+  try {
+    const eventId = req.params.id
+    
+    const { error } = await supabase
+      .from('events')
+      .delete()
+      .eq('id', eventId)
+    
+    if (error) throw error
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ detail: err.message })
+  }
+})
+
 // ==================== CHAT / ANÁLISE DIÁRIA ====================
 
 app.post('/api/chat', async (req, res) => {

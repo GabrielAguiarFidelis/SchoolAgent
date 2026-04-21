@@ -20,7 +20,7 @@ CREATE POLICY "Allow all operations on users" ON users
 -- Tabela de tarefas (atualizada)
 CREATE TABLE IF NOT EXISTS tasks (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID,
   title TEXT NOT NULL,
   description TEXT,
   priority TEXT DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high')),
@@ -33,13 +33,13 @@ CREATE INDEX tasks_user_id ON tasks(user_id);
 
 ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can manage own tasks" ON tasks
-  FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "Allow all operations on tasks" ON tasks
+  FOR ALL USING (true) WITH CHECK (true);
 
 -- Tabela de eventos
 CREATE TABLE IF NOT EXISTS events (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID,
   title TEXT NOT NULL,
   date DATE NOT NULL,
   time TIME,
@@ -51,5 +51,5 @@ CREATE INDEX events_user_id ON events(user_id);
 
 ALTER TABLE events ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can manage own events" ON events
-  FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "Allow all operations on events" ON events
+  FOR ALL USING (true) WITH CHECK (true);

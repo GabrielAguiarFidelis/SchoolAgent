@@ -42,6 +42,7 @@ export const authApi = {
     const data = await response.json()
     const token = btoa(`${data.user.id}:${Date.now()}`)
     localStorage.setItem('token', token)
+    localStorage.setItem('user', JSON.stringify(data.user))
     return data
   },
 
@@ -60,6 +61,7 @@ export const authApi = {
     const data = await response.json()
     const token = btoa(`${data.user.id}:${Date.now()}`)
     localStorage.setItem('token', token)
+    localStorage.setItem('user', JSON.stringify(data.user))
     return data
   },
 }
@@ -110,7 +112,7 @@ export const tasksApi = {
         'Authorization': `Bearer ${getToken()}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(task),
+      body: JSON.stringify({ ...task, user_id: user.id }),
     })
     
     if (!response.ok) throw new Error('Request failed')
@@ -126,7 +128,10 @@ export const tasksApi = {
       headers: { 'Authorization': `Bearer ${getToken()}` },
     })
     
-    if (!response.ok) throw new Error('Request failed')
+if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Request failed' }))
+      throw new Error(error.detail || 'Request failed')
+    }
   },
 }
 
@@ -156,7 +161,19 @@ export const eventsApi = {
       body: JSON.stringify({ ...event, user_id: user.id }),
     })
     
-    if (!response.ok) throw new Error('Request failed')
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Request failed' }))
+      throw new Error(error.detail || 'Request failed')
+    }
     return response.json()
+  },
+
+  delete: async (eventId: string) => {
+    const response = await fetch(`${API_URL}/events/${eventId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${getToken()}` },
+    })
+    
+    if (!response.ok) throw new Error('Request failed')
   },
 }

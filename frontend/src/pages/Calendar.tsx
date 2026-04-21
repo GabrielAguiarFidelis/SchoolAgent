@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isSameMonth, addMonths, subMonths } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react'
 import { eventsApi } from '../services/api'
 
 interface Event {
@@ -23,6 +23,8 @@ export default function Calendar() {
     description: '',
   })
   const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchEvents()
@@ -43,6 +45,9 @@ export default function Calendar() {
     e.preventDefault()
     if (!newEvent.title.trim() || !newEvent.date) return
 
+    setSubmitting(true)
+    setError(null)
+
     try {
       await eventsApi.create({
         title: newEvent.title,
@@ -54,7 +59,18 @@ export default function Calendar() {
       setShowForm(false)
       fetchEvents()
     } catch (err) {
-      console.error('Error creating event:', err)
+      setError(err instanceof Error ? err.message : 'Erro ao criar evento')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const deleteEvent = async (id: string) => {
+    try {
+      await eventsApi.delete(id)
+      fetchEvents()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao excluir evento')
     }
   }
 
@@ -87,6 +103,11 @@ export default function Calendar() {
 
       {showForm && (
         <form onSubmit={handleCreate} className="mb-8 bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg text-sm">
+              {error}
+            </div>
+          )}
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Título</label>
@@ -121,8 +142,8 @@ export default function Calendar() {
               </div>
             </div>
             <div className="flex gap-2">
-              <button type="submit" className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">
-                Criar
+              <button type="submit" disabled={submitting} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50">
+                {submitting ? 'Criando...' : 'Criar'}
               </button>
               <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg">
                 Cancelar
@@ -169,8 +190,14 @@ export default function Calendar() {
                   {format(day, 'd')}
                 </div>
                 {dayEvents.slice(0, 2).map((event) => (
-                  <div key={event.id} className="mt-1 px-1 py-0.5 text-xs bg-primary-100 dark:bg-primary-900 text-primary-800 dark:text-primary-200 rounded truncate">
-                    {event.title}
+                  <div key={event.id} className="mt-1 px-1 py-0.5 text-xs bg-primary-100 dark:bg-primary-900 text-primary-800 dark:text-primary-200 rounded truncate flex items-center justify-between group">
+                    <span className="truncate">{event.title}</span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); deleteEvent(event.id) }}
+                      className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 ml-1"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
                   </div>
                 ))}
               </div>
