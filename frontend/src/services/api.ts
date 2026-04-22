@@ -25,6 +25,16 @@ const getUser = () => {
   return null
 }
 
+const getResponseJson = async (response: Response) => {
+  const text = await response.text()
+  if (!text) return null
+  try {
+    return JSON.parse(text)
+  } catch {
+    return null
+  }
+}
+
 export const authApi = {
   register: async (email: string, password: string, fullName?: string) => {
     console.log('Registering:', email)
@@ -34,12 +44,12 @@ export const authApi = {
       body: JSON.stringify({ email, password, full_name: fullName }),
     })
     
+    const data = await getResponseJson(response)
+    
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: 'Request failed' }))
-      throw new Error(error.detail || 'Request failed')
+      throw new Error(data?.detail || 'Registration failed')
     }
     
-    const data = await response.json()
     const token = btoa(`${data.user.id}:${Date.now()}`)
     localStorage.setItem('token', token)
     localStorage.setItem('user', JSON.stringify(data.user))
@@ -53,18 +63,12 @@ export const authApi = {
       body: JSON.stringify({ email, password }),
     })
     
-    const text = await response.text()
+    const data = await getResponseJson(response)
     
     if (!response.ok) {
-      let detail = 'Login failed'
-      try {
-        const error = JSON.parse(text)
-        detail = error.detail || detail
-      } catch {}
-      throw new Error(detail)
+      throw new Error(data?.detail || 'Login failed')
     }
     
-    const data = JSON.parse(text)
     const token = btoa(`${data.user.id}:${Date.now()}`)
     localStorage.setItem('token', token)
     localStorage.setItem('user', JSON.stringify(data.user))
