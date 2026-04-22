@@ -355,6 +355,7 @@ const pergunda = message && !message.includes('analise') ? '\nPergunta do usuari
     
     if (GROQ_API_KEY) {
       try {
+        console.log('Calling Groq API...')
         const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -378,7 +379,10 @@ const pergunda = message && !message.includes('analise') ? '\nPergunta do usuari
           })
         })
         
+        console.log('Groq response status:', groqResponse.status)
         const groqData = await groqResponse.json()
+        console.log('Groq response:', JSON.stringify(groqData))
+        
         if (groqData.choices && groqData.choices[0]) {
           response = groqData.choices[0].message.content
         } else {
@@ -389,6 +393,7 @@ const pergunda = message && !message.includes('analise') ? '\nPergunta do usuari
         response = resumo
       }
     } else {
+      console.log('No GROQ_API_KEY, using simple response')
       response = resumo
     }
     
