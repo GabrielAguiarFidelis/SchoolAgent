@@ -3,7 +3,6 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import { createClient } from '@supabase/supabase-js'
 import bcrypt from 'bcryptjs'
-import OpenAI from 'openai'
 
 dotenv.config()
 
@@ -16,9 +15,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 )
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-})
+const GROQ_API_KEY = process.env.GROQ_API_KEY
 
 // ==================== AUTH ====================
 
@@ -314,37 +311,84 @@ const eventosSemanaLista = eventosSemana.slice(0, 3).map(e => '* ' + e.title + '
 
 const pergunda = message && !message.includes('analise') ? '\nPergunta do usuario: ' + message : ''
 
-    const prompt = 'Voce e um assistente de produtividade amigavel. Analise os dados de ' + nomeUsuario + ' e responda de forma util.\n\nDados do dia: ' + new Date().toLocaleDateString('pt-BR') + '\n\nTarefas pendentes (' + tarefasPendentes.length + '):\n' + tarefasLista + '\n\nTarefas vencidas (' + tarefasVencidas.length + '):\n' + tarefasVencidasLista + '\n\nEventos de hoje (' + eventosHoje.length + '):\n' + eventosHojeLista + '\n\nEventos da semana (' + eventosSemana.length + '):\n' + eventosSemanaLista + pergunda + '\n\nRequisitos:\n1. Seja amigavel e motivador\n2. Destaque tarefas importantes/urgentes\n3. Maximo 200 caracteres\n4. Inclua uma dica de produtividade\n5. Responda em portugues de forma clara'
-
-    // Gerar resposta simples sem IA
-    let response = gerarRespostaSimples(tarefasPendentes, tarefasVencidas, eventosHoje, nomeUsuario, message)
+    const dataAtual = new Date().toLocaleDateString('pt-BR')
+    const saudacao = getSaudacao()
     
-    // Se tiver chave do OpenAI configurada, usa IA
-    const openaiKey = process.env.OPENAI_API_KEY
-    console.log('Testing OpenAI...')
+    let resumo = saudacao + ' ' + nomeUsuario + '! Seu resumo de hoje (' + dataAtual + '):\n\n'
     
-    if (openaiKey) {
+    if (tarefasVencidas.length > 0) {
+      resumo += 'ATENCAO! ' + tarefasVencidas.length + ' tarefa(s) vencida(s):\n'
+      tarefasVencidas.slice(0, 3).forEach(t => {
+        resumo += '- ' + t.title + '\n'
+      })
+      if (tarefasVencidas.length > 3) resumo += '... e mais ' + (tarefasVencidas.length - 3) + '\n'
+      resumo += '\n'
+    }
+    
+    resumo += 'Tarefas pendentes: ' + tarefasPendentes.length + '\n'
+    if (tarefasPendentes.length > 0) {
+      tarefasPendentes.slice(0, 5).forEach(t => {
+        const prio = t.priority === 'high' ? '[URGENTE]' : t.priority === 'medium' ? '[medio]' : '[baixo]'
+        const prazo = t.due_date ? ' ate ' + new Date(t.due_date).toLocaleDateString('pt-BR') : ''
+        resumo += '- ' + prio + ' ' + t.title + prazo + '\n'
+      })
+    }
+    
+    if (eventosHoje.length > 0) {
+      resumo += '\nEventos hoje:\n'
+      eventosHoje.forEach(e => {
+        resumo += '- ' + e.title + (e.time ? ' as ' + e.time : '') + '\n'
+      })
+    }
+    
+    if (eventosSemana.length > 0) {
+      resumo += '\nEventos da semana:\n'
+      eventosSemana.slice(0, 3).forEach(e => {
+        resumo += '- ' + e.title + ' em ' + new Date(e.date).toLocaleDateString('pt-BR') + '\n'
+      })
+    }
+    
+    resumo += '\nDica: Foque nas tarefas [URGENTE] primeiro!'
+    
+    const perguntaUsuario = message || ''
+    
+    if (GROQ_API_KEY) {
       try {
-        console.log('Calling OpenAI...')
-        const completion = await openai.chat.completions.create({
-          model: 'gpt-4o-mini',
-          messages: [
-            {
-              role: 'system',
-              content: 'Voce e um assistente de produtividade amigavel e motivador. Responda em portugues brasileiro, seja direto e util. Maximo 200 caracteres.'
-            },
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
-          max_tokens: 200,
-          temperature: 0.7
+        const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + GROQ_API_KEY,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: 'llama-3.1-8b-instant',
+            messages: [
+              {
+                role: 'system',
+                content: 'Voce e um assistente de produtividade amigavel e motivador. Sempre inclua um resumo do dia e uma dica de produtividade. Responda em portugues brasileiro, seja direto e util. Maximo 300 caracteres na resposta final.'
+              },
+              {
+                role: 'user',
+                content: 'Contexto do usuario ' + nomeUsuario + ':\n' + resumo + '\n\nPergunta do usuario: ' + perguntaUsuario
+              }
+            ],
+            max_tokens: 300,
+            temperature: 0.7
+          })
         })
-        response = completion.choices[0].message.content
+        
+        const groqData = await groqResponse.json()
+        if (groqData.choices && groqData.choices[0]) {
+          response = groqData.choices[0].message.content
+        } else {
+          response = resumo
+        }
       } catch (iaErr) {
-        console.log('OpenAI error:', iaErr.message || iaErr)
+        console.log('Groq error:', iaErr.message)
+        response = resumo
       }
+    } else {
+      response = resumo
     }
     
     res.json({ response: response })
