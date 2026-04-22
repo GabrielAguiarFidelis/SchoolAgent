@@ -8,8 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint .",
-    "test": "vitest",
-    "start": "npm run dev & npm run build"
+    "test": "vitest"
   },
   "dependencies": {
     "react": "^18.3.1",
