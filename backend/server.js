@@ -352,6 +352,7 @@ const pergunda = message && !message.includes('analise') ? '\nPergunta do usuari
     resumo += '\nDica: Foque nas tarefas [URGENTE] primeiro!'
     
     const perguntaUsuario = message || ''
+    let response = resumo
     
     if (GROQ_API_KEY) {
       try {
