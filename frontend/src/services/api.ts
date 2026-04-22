@@ -53,12 +53,18 @@ export const authApi = {
       body: JSON.stringify({ email, password }),
     })
     
+    const text = await response.text()
+    
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: 'Request failed' }))
-      throw new Error(error.detail || 'Request failed')
+      let detail = 'Login failed'
+      try {
+        const error = JSON.parse(text)
+        detail = error.detail || detail
+      } catch {}
+      throw new Error(detail)
     }
     
-    const data = await response.json()
+    const data = JSON.parse(text)
     const token = btoa(`${data.user.id}:${Date.now()}`)
     localStorage.setItem('token', token)
     localStorage.setItem('user', JSON.stringify(data.user))
