@@ -16,6 +16,7 @@ const supabase = createClient(
 )
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY
+console.log('GROQ_API_KEY loaded:', GROQ_API_KEY ? 'YES' : 'NO')
 
 // ==================== AUTH ====================
 
