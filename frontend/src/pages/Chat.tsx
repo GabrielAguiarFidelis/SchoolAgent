@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { authApi, API_URL } from '../services/api'
 import { Send, Bot, User } from 'lucide-react'
 
 interface Message {
@@ -36,7 +37,7 @@ export default function Chat() {
       const userData = localStorage.getItem('user')
       const user = userData ? JSON.parse(userData) : null
       
-      const response = await fetch('/api/chat', {
+      const response = await fetch(`${API_URL}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
