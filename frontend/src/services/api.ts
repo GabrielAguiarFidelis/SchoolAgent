@@ -42,19 +42,20 @@ const getResponseJson = async (response: Response) => {
 }
 
 export const authApi = {
-  register: async (email: string, password: string, fullName?: string) => {
+  register: async (email: string, password: string, fullName?: string, termsAccepted?: boolean) => {
     const response = await fetch(`${API_URL}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, full_name: fullName }),
+      body: JSON.stringify({ email, password, full_name: fullName, terms_accepted: termsAccepted || false }),
     })
     
-    const data = await getResponseJson(response)
+const data = await getResponseJson(response)
     
     if (!response.ok) {
-      throw new Error(data?.detail || 'Registration failed')
+      throw new Error(data?.detail || 'Login failed')
     }
     
+    localStorage.setItem('token', data.token)
     localStorage.setItem('user', JSON.stringify(data.user))
     return data
   },
