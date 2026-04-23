@@ -10,6 +10,7 @@ export default function Register({ onLogin }: RegisterProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
+  const [termsAccepted, setTermsAccepted] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -24,11 +25,15 @@ export default function Register({ onLogin }: RegisterProps) {
       return
     }
 
+    if (!termsAccepted) {
+      setError('Você precisa aceitar os termos para criar uma conta')
+      setLoading(false)
+      return
+    }
+
     try {
-      const response = await authApi.register(email, password, fullName || undefined)
-      
-      const token = btoa(`${response.user.id}:${Date.now()}`)
-      onLogin(response.user, token)
+      const response = await authApi.register(email, password, fullName || undefined, true)
+      onLogin(response.user, response.token)
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Erro ao criar conta'
       setError(message)
@@ -99,6 +104,30 @@ export default function Register({ onLogin }: RegisterProps) {
                 className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-primary-500 focus:border-primary-500"
                 placeholder="Mínimo 6 caracteres"
               />
+            </div>
+            <div className="flex items-start">
+              <div className="flex items-center h-5">
+                <input
+                  id="terms"
+                  type="checkbox"
+                  required
+                  checked={termsAccepted}
+                  onChange={(e) => setTermsAccepted(e.target.checked)}
+                  className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600 rounded"
+                />
+              </div>
+              <div className="ml-3 text-sm">
+                <label htmlFor="terms" className="font-medium text-gray-700 dark:text-gray-300">
+                  Eu li e aceito os{' '}
+                  <a href="/terms" target="_blank" className="text-primary-600 hover:text-primary-500">
+                    Termos de Uso
+                  </a>
+                  {' '}e{' '}
+                  <a href="/privacy" target="_blank" className="text-primary-600 hover:text-primary-500">
+                    Política de Privacidade
+                  </a>
+                </label>
+              </div>
             </div>
           </div>
           <button

@@ -4,6 +4,8 @@ import dotenv from 'dotenv'
 import { createClient } from '@supabase/supabase-js'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
+import helmet from 'helmet'
+import rateLimit from 'express-rate-limit'
 
 dotenv.config()
 
@@ -14,6 +16,7 @@ const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
   : ['http://localhost:5173', 'http://localhost:3000']
 
 const app = express()
+app.use(helmet())
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || ALLOWED_ORIGINS.includes(origin)) {
@@ -28,11 +31,26 @@ app.use(express.json())
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
+  process.env.SUPABASE_ANON_KEY
 )
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY
-console.log('GROQ_API_KEY loaded:', GROQ_API_KEY ? 'YES' : 'NO')
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { detail: 'Muitas tentativas. Tente novamente em 15 minutos.' }
+})
+
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 100,
+  message: { detail: 'Muitas requisições. Tente novamente em 1 minuto.' }
+})
+
+app.use('/api/auth/login', authLimiter)
+app.use('/api/auth/register', authLimiter)
+app.use('/api', apiLimiter)
 
 // ==================== MIDDLEWARE ====================
 
@@ -56,10 +74,14 @@ const authenticate = (req, res, next) => {
 
 app.post('/api/auth/register', async (req, res) => {
   try {
-    const { email, password, full_name } = req.body
+    const { email, password, full_name, terms_accepted } = req.body
     
     if (!email || !password) {
       return res.status(400).json({ detail: 'Email and password required' })
+    }
+    
+    if (!terms_accepted) {
+      return res.status(400).json({ detail: 'You must accept the terms to register' })
     }
     
     if (password.length < 6) {
@@ -83,7 +105,8 @@ app.post('/api/auth/register', async (req, res) => {
         email: email.toLowerCase(),
         password_hash,
         full_name: full_name || null,
-        preferences: {}
+        preferences: {},
+        terms_accepted_at: new Date().toISOString()
       })
       .select()
     
