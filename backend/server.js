@@ -3,11 +3,27 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import { createClient } from '@supabase/supabase-js'
 import bcrypt from 'bcryptjs'
+import jwt from 'jsonwebtoken'
 
 dotenv.config()
 
+const JWT_SECRET = process.env.JWT_SECRET || 'school-agent-secret-key-change-in-production'
+
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS 
+  ? process.env.ALLOWED_ORIGINS.split(',') 
+  : ['http://localhost:5173', 'http://localhost:3000']
+
 const app = express()
-app.use(cors())
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+      callback(null, true)
+    } else {
+      callback(new Error('Not allowed by CORS'))
+    }
+  },
+  credentials: true
+}))
 app.use(express.json())
 
 const supabase = createClient(
@@ -17,6 +33,24 @@ const supabase = createClient(
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY
 console.log('GROQ_API_KEY loaded:', GROQ_API_KEY ? 'YES' : 'NO')
+
+// ==================== MIDDLEWARE ====================
+
+const authenticate = (req, res, next) => {
+  const authHeader = req.headers.authorization
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ detail: 'Token required' })
+  }
+  
+  const token = authHeader.substring(7)
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET)
+    req.userId = decoded.userId
+    next()
+  } catch (err) {
+    return res.status(401).json({ detail: 'Invalid token' })
+  }
+}
 
 // ==================== AUTH ====================
 
@@ -88,6 +122,8 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ detail: 'Invalid email or password' })
     }
     
+    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' })
+    
     res.json({
       user: {
         id: user.id,
@@ -95,7 +131,8 @@ app.post('/api/auth/login', async (req, res) => {
         full_name: user.full_name,
         preferences: user.preferences,
         created_at: user.created_at
-      }
+      },
+      token
     })
   } catch (err) {
     console.error('Login error:', err)
@@ -103,17 +140,35 @@ app.post('/api/auth/login', async (req, res) => {
   }
 })
 
+app.delete('/api/users/me', authenticate, async (req, res) => {
+  try {
+    // Deletar tarefas e eventos primeiro
+    await supabase.from('tasks').delete().eq('user_id', req.userId)
+    await supabase.from('events').delete().eq('user_id', req.userId)
+    
+    // Deletar usuário
+    const { error } = await supabase
+      .from('users')
+      .delete()
+      .eq('id', req.userId)
+    
+    if (error) throw error
+    
+    res.json({ message: 'Account deleted successfully' })
+  } catch (err) {
+    console.error('Delete account error:', err)
+    res.status(500).json({ detail: err.message })
+  }
+})
+
 // ==================== TASKS ====================
 
-app.get('/api/tasks', async (req, res) => {
+app.get('/api/tasks', authenticate, async (req, res) => {
   try {
-    const userId = req.query.user_id
-    if (!userId) return res.status(400).json({ detail: 'user_id required' })
-    
     const { data, error } = await supabase
       .from('tasks')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', req.userId)
       .order('created_at', { ascending: false })
     
     if (error) throw error
@@ -123,27 +178,18 @@ app.get('/api/tasks', async (req, res) => {
   }
 })
 
-app.post('/api/tasks', async (req, res) => {
+app.post('/api/tasks', authenticate, async (req, res) => {
   try {
-    const { user_id, title, description, priority, due_date } = req.body
+    const { title, description, priority, due_date } = req.body
     
-    if (!user_id || !title) {
-      return res.status(400).json({ detail: 'user_id and title required' })
-    }
-    
-    const { data: user } = await supabase
-      .from('users')
-      .select('id')
-      .eq('id', user_id)
-    
-    if (!user || user.length === 0) {
-      return res.status(400).json({ detail: 'Usuário não encontrado' })
+    if (!title) {
+      return res.status(400).json({ detail: 'title required' })
     }
     
     const { data, error } = await supabase
       .from('tasks')
       .insert({
-        user_id,
+        user_id: req.userId,
         title,
         description: description || null,
         priority: priority || 'medium',
@@ -160,16 +206,16 @@ app.post('/api/tasks', async (req, res) => {
   }
 })
 
-app.put('/api/tasks/:id', async (req, res) => {
+app.put('/api/tasks/:id', authenticate, async (req, res) => {
   try {
     const taskId = req.params.id
-    const { user_id, ...updates } = req.body
+    const { title, description, completed, priority, due_date } = req.body
     
     const { data, error } = await supabase
       .from('tasks')
-      .update(updates)
+      .update({ title, description, completed, priority, due_date })
       .eq('id', taskId)
-      .eq('user_id', user_id)
+      .eq('user_id', req.userId)
       .select()
     
     if (error) throw error
@@ -179,16 +225,15 @@ app.put('/api/tasks/:id', async (req, res) => {
   }
 })
 
-app.delete('/api/tasks/:id', async (req, res) => {
+app.delete('/api/tasks/:id', authenticate, async (req, res) => {
   try {
     const taskId = req.params.id
-    const userId = req.query.user_id
     
     const { error } = await supabase
       .from('tasks')
       .delete()
       .eq('id', taskId)
-      .eq('user_id', userId)
+      .eq('user_id', req.userId)
     
     if (error) throw error
     res.json({ message: 'Task deleted' })
@@ -199,15 +244,12 @@ app.delete('/api/tasks/:id', async (req, res) => {
 
 // ==================== EVENTS ====================
 
-app.get('/api/events', async (req, res) => {
+app.get('/api/events', authenticate, async (req, res) => {
   try {
-    const userId = req.query.userId
-    if (!userId) return res.status(400).json({ detail: 'userId required' })
-    
     const { data, error } = await supabase
       .from('events')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', req.userId)
       .order('date', { ascending: true })
     
     if (error) throw error
@@ -217,27 +259,18 @@ app.get('/api/events', async (req, res) => {
   }
 })
 
-app.post('/api/events', async (req, res) => {
+app.post('/api/events', authenticate, async (req, res) => {
   try {
-    const { user_id, title, date, time, description } = req.body
+    const { title, date, time, description } = req.body
     
-    if (!user_id || !title || !date) {
-      return res.status(400).json({ detail: 'user_id, title and date required' })
-    }
-    
-    const { data: user } = await supabase
-      .from('users')
-      .select('id')
-      .eq('id', user_id)
-    
-    if (!user || user.length === 0) {
-      return res.status(400).json({ detail: 'Usuário não encontrado' })
+    if (!title || !date) {
+      return res.status(400).json({ detail: 'title and date required' })
     }
     
     const { data, error } = await supabase
       .from('events')
       .insert({
-        user_id,
+        user_id: req.userId,
         title,
         date,
         time: time || null,
@@ -252,7 +285,7 @@ app.post('/api/events', async (req, res) => {
   }
 })
 
-app.delete('/api/events/:id', async (req, res) => {
+app.delete('/api/events/:id', authenticate, async (req, res) => {
   try {
     const eventId = req.params.id
     
@@ -260,6 +293,7 @@ app.delete('/api/events/:id', async (req, res) => {
       .from('events')
       .delete()
       .eq('id', eventId)
+      .eq('user_id', req.userId)
     
     if (error) throw error
     res.json({ success: true })
@@ -270,15 +304,15 @@ app.delete('/api/events/:id', async (req, res) => {
 
 // ==================== CHAT / ANÁLISE DIÁRIA ====================
 
-app.post('/api/chat', async (req, res) => {
+app.post('/api/chat', authenticate, async (req, res) => {
   try {
-    const { message, user_id } = req.body
+    const { message } = req.body
     
     // Buscar dados do usuário
     const [{ data: tasks }, { data: events }, { data: user }] = await Promise.all([
-      supabase.from('tasks').select('*').eq('user_id', user_id),
-      supabase.from('events').select('*').eq('user_id', user_id),
-      supabase.from('users').select('*').eq('id', user_id)
+      supabase.from('tasks').select('*').eq('user_id', req.userId),
+      supabase.from('events').select('*').eq('user_id', req.userId),
+      supabase.from('users').select('*').eq('id', req.userId)
     ])
     
     const tarefasPendentes = (tasks || []).filter(t => !t.completed)

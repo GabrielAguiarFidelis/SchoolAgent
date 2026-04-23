@@ -10,6 +10,7 @@ export interface User {
 
 export interface LoginResponse {
   user: User
+  token: string
 }
 
 const getToken = () => localStorage.getItem('token')
@@ -25,6 +26,11 @@ const getUser = () => {
   return null
 }
 
+const authHeaders = () => ({
+  'Content-Type': 'application/json',
+  'Authorization': `Bearer ${getToken()}`
+})
+
 const getResponseJson = async (response: Response) => {
   const text = await response.text()
   if (!text) return null
@@ -37,7 +43,6 @@ const getResponseJson = async (response: Response) => {
 
 export const authApi = {
   register: async (email: string, password: string, fullName?: string) => {
-    console.log('Registering:', email)
     const response = await fetch(`${API_URL}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -50,8 +55,6 @@ export const authApi = {
       throw new Error(data?.detail || 'Registration failed')
     }
     
-    const token = btoa(`${data.user.id}:${Date.now()}`)
-    localStorage.setItem('token', token)
     localStorage.setItem('user', JSON.stringify(data.user))
     return data
   },
@@ -69,20 +72,31 @@ export const authApi = {
       throw new Error(data?.detail || 'Login failed')
     }
     
-    const token = btoa(`${data.user.id}:${Date.now()}`)
-    localStorage.setItem('token', token)
+    localStorage.setItem('token', data.token)
     localStorage.setItem('user', JSON.stringify(data.user))
     return data
+  },
+
+  deleteAccount: async () => {
+    const response = await fetch(`${API_URL}/users/me`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+    })
+    
+    if (!response.ok) {
+      const data = await getResponseJson(response)
+      throw new Error(data?.detail || 'Delete failed')
+    }
+    
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
   },
 }
 
 export const tasksApi = {
   getAll: async () => {
-    const user = getUser()
-    if (!user) throw new Error('Not authenticated')
-    
-    const response = await fetch(`${API_URL}/tasks/?user_id=${user.id}`, {
-      headers: { 'Authorization': `Bearer ${getToken()}` },
+    const response = await fetch(`${API_URL}/tasks`, {
+      headers: authHeaders(),
     })
     
     if (!response.ok) throw new Error('Request failed')
@@ -90,39 +104,21 @@ export const tasksApi = {
   },
 
   create: async (task: { title: string; description?: string; priority?: string; due_date?: string }) => {
-    const user = getUser()
-    if (!user) throw new Error('Not authenticated')
-    
-    console.log('Creating task:', { ...task, user_id: user.id })
-    
     const response = await fetch(`${API_URL}/tasks`, {
       method: 'POST',
-      headers: { 
-        'Authorization': `Bearer ${getToken()}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ ...task, user_id: user.id }),
+      headers: authHeaders(),
+      body: JSON.stringify(task),
     })
     
-    console.log('Response status:', response.status)
-    const text = await response.text()
-    console.log('Response:', text)
-    
     if (!response.ok) throw new Error('Request failed')
-    return JSON.parse(text)
+    return response.json()
   },
 
   update: async (taskId: string, task: { title?: string; description?: string; completed?: boolean; priority?: string }) => {
-    const user = getUser()
-    if (!user) throw new Error('Not authenticated')
-    
-    const response = await fetch(`${API_URL}/tasks/${taskId}?user_id=${user.id}`, {
+    const response = await fetch(`${API_URL}/tasks/${taskId}`, {
       method: 'PUT',
-      headers: { 
-        'Authorization': `Bearer ${getToken()}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ ...task, user_id: user.id }),
+      headers: authHeaders(),
+      body: JSON.stringify(task),
     })
     
     if (!response.ok) throw new Error('Request failed')
@@ -130,28 +126,19 @@ export const tasksApi = {
   },
 
   delete: async (taskId: string) => {
-    const user = getUser()
-    if (!user) throw new Error('Not authenticated')
-    
-    const response = await fetch(`${API_URL}/tasks/${taskId}?user_id=${user.id}`, {
+    const response = await fetch(`${API_URL}/tasks/${taskId}`, {
       method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${getToken()}` },
+      headers: authHeaders(),
     })
     
-if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: 'Request failed' }))
-      throw new Error(error.detail || 'Request failed')
-    }
+    if (!response.ok) throw new Error('Request failed')
   },
 }
 
 export const eventsApi = {
   getAll: async () => {
-    const user = getUser()
-    if (!user) throw new Error('Not authenticated')
-    
-    const response = await fetch(`${API_URL}/events/?userId=${user.id}`, {
-      headers: { 'Authorization': `Bearer ${getToken()}` },
+    const response = await fetch(`${API_URL}/events`, {
+      headers: authHeaders(),
     })
     
     if (!response.ok) throw new Error('Request failed')
@@ -159,31 +146,40 @@ export const eventsApi = {
   },
 
   create: async (event: { title: string; date: string; time?: string; description?: string }) => {
-    const user = getUser()
-    if (!user) throw new Error('Not authenticated')
-    
     const response = await fetch(`${API_URL}/events`, {
       method: 'POST',
-      headers: { 
-        'Authorization': `Bearer ${getToken()}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ ...event, user_id: user.id }),
+      headers: authHeaders(),
+      body: JSON.stringify(event),
     })
     
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: 'Request failed' }))
-      throw new Error(error.detail || 'Request failed')
-    }
+    if (!response.ok) throw new Error('Request failed')
     return response.json()
   },
 
   delete: async (eventId: string) => {
     const response = await fetch(`${API_URL}/events/${eventId}`, {
       method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${getToken()}` },
+      headers: authHeaders(),
     })
     
     if (!response.ok) throw new Error('Request failed')
+  },
+}
+
+export const chatApi = {
+  send: async (message: string) => {
+    const response = await fetch(`${API_URL}/chat`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ message }),
+    })
+    
+    const data = await getResponseJson(response)
+    
+    if (!response.ok) {
+      throw new Error(data?.response || 'Chat failed')
+    }
+    
+    return data.response
   },
 }

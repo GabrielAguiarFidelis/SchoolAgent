@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { authApi, API_URL } from '../services/api'
+import { chatApi } from '../services/api'
 import { Send, Bot, User } from 'lucide-react'
 
 interface Message {
@@ -34,24 +34,12 @@ export default function Chat() {
     setLoading(true)
 
     try {
-      const userData = localStorage.getItem('user')
-      const user = userData ? JSON.parse(userData) : null
-      
-      const response = await fetch(`${API_URL}/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: input,
-          user_id: user?.id
-        }),
-      })
-
-      const data = await response.json()
+      const response = await chatApi.send(input)
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: data.response || 'Desculpe, não consegui responder.',
+        content: response || 'Desculpe, não consegui responder.',
         created_at: new Date().toISOString(),
       }
 
