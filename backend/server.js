@@ -16,6 +16,7 @@ const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
   : ['http://localhost:5173', 'http://localhost:3000']
 
 const app = express()
+app.set('trust proxy', 1)
 app.use(helmet())
 app.use(cors({
   origin: (origin, callback) => {
@@ -39,13 +40,15 @@ const GROQ_API_KEY = process.env.GROQ_API_KEY
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
-  message: { detail: 'Muitas tentativas. Tente novamente em 15 minutos.' }
+  message: { detail: 'Muitas tentativas. Tente novamente em 15 minutos.' },
+  validate: { xForwardedForHeader: false }
 })
 
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 100,
-  message: { detail: 'Muitas requisições. Tente novamente em 1 minuto.' }
+  message: { detail: 'Muitas requisições. Tente novamente em 1 minuto.' },
+  validate: { xForwardedForHeader: false }
 })
 
 app.use('/api/auth/login', authLimiter)
