@@ -60,16 +60,21 @@ app.use('/api', apiLimiter)
 
 const authenticate = (req, res, next) => {
   const authHeader = req.headers.authorization
+  console.log('Auth header:', authHeader)
+  
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    console.log('No token provided')
     return res.status(401).json({ detail: 'Token required' })
   }
   
   const token = authHeader.substring(7)
   try {
     const decoded = jwt.verify(token, JWT_SECRET)
+    console.log('Token decoded, userId:', decoded.userId)
     req.userId = decoded.userId
     next()
   } catch (err) {
+    console.log('Invalid token:', err.message)
     return res.status(401).json({ detail: 'Invalid token' })
   }
 }
