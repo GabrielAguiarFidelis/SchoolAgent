@@ -20,8 +20,7 @@ export default function Login({ onLogin }: LoginProps) {
     try {
       const response = await authApi.login(email, password)
       
-      const token = btoa(`${response.user.id}:${Date.now()}`)
-      onLogin(response.user, token)
+      onLogin(response.user, response.token)
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Erro ao entrar'
       setError(message)
