@@ -6,6 +6,7 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
+import crypto from 'crypto'
 
 dotenv.config()
 
@@ -32,7 +33,7 @@ app.use(express.json())
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
+  process.env.SUPABASE_SERVICE_KEY
 )
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY
@@ -142,7 +143,17 @@ app.post('/api/auth/login', async (req, res) => {
     }
     
     const user = data[0]
-    const valid = await bcrypt.compare(password, user.password_hash)
+    
+    // Verificar se o hash é bcrypt (começa com $2a$) ou SHA-256
+    let valid = false
+    if (user.password_hash.startsWith('$2a$')) {
+      // Usar bcrypt para hashes antigos
+      valid = await bcrypt.compare(password, user.password_hash)
+    } else {
+      // Usar SHA-256 para hashes novos
+      const passwordHash = crypto.createHash('sha256').update(password).digest('hex')
+      valid = passwordHash === user.password_hash
+    }
     
     if (!valid) {
       return res.status(401).json({ detail: 'Invalid email or password' })

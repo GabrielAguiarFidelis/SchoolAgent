@@ -49,15 +49,13 @@ export const authApi = {
       body: JSON.stringify({ email, password, full_name: fullName, terms_accepted: termsAccepted || false }),
     })
     
-const data = await getResponseJson(response)
+    const data = await getResponseJson(response)
     
     if (!response.ok) {
-      throw new Error(data?.detail || 'Login failed')
+      throw new Error(data?.detail || 'Registration failed')
     }
     
-    localStorage.setItem('token', data.token)
-    localStorage.setItem('user', JSON.stringify(data.user))
-    return data
+    return { user: data.user, needsLogin: true }
   },
 
   login: async (email: string, password: string) => {

@@ -33,7 +33,14 @@ export default function Register({ onLogin }: RegisterProps) {
 
     try {
       const response = await authApi.register(email, password, fullName || undefined, true)
-      onLogin(response.user, response.token)
+      
+      if (response.needsLogin) {
+        // Fazer login automático após registro
+        const loginResponse = await authApi.login(email, password)
+        onLogin(loginResponse.user, loginResponse.token)
+      } else {
+        onLogin(response.user, response.token)
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Erro ao criar conta'
       setError(message)
